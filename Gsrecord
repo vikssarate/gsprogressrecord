@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Aptitude Memorisation App</title>
+<style>
+:root{--bg:#0f1220;--card:#181c2f;--ink:#eef1ff;--muted:#9aa3c7;--line:#2a3052;--ok:#7bd88f;--bad:#ff7575;--accent:#6ca8ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;-webkit-tap-highlight-color:transparent}
+header,footer{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:18px;font-weight:600}
+.wrap{max-width:1200px;margin:0 auto;padding:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.grid{display:grid;gap:12px}
+@media(min-width:900px){.grid{grid-template-columns:300px 1fr}}
+.btn{background:var(--accent);color:#071225;border:none;border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:600}
+.btn.alt{background:#2b3258}.btn.danger{background:var(--bad)}.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+input[type="text"]{background:#0f1325;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px}
+.small{font-size:12px;color:var(--muted)}
+.badge{padding:2px 6px;border:1px solid var(--line);border-radius:6px}
+.state-intense{background:#24324f}.state-streak{background:#2a3a2a}.state-spaced{background:#2f2a3a}.state-weekly{background:#2a3440}
+.card{border:1px dashed var(--line);border-radius:10px;padding:10px}
+ul{padding:0;margin:0}.list{display:flex;flex-direction:column;gap:8px;max-height:70vh;overflow:auto}
+.subject-item{padding:8px;border:1px solid var(--line);border-radius:10px}
+.topic-item{padding:6px 8px;margin-top:6px;border:1px dashed var(--line);border-radius:10px}
+.table{width:100%;border-collapse:collapse}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;font-size:14px}
+.hr{height:1px;background:var(--line);margin:8px 0}
+.empty{color:var(--muted);font-style:italic}
+
+/* checkbox ticks */
+.chkrow{display:flex;align-items:center;gap:10px;margin:6px 0;-webkit-user-select:none;user-select:none}
+.chklabel{width:42px;text-transform:capitalize;font-size:12px;color:var(--muted)}
+.chkgrid{display:grid;grid-template-columns:repeat(3,38px);gap:10px}
+.tick{appearance:none;-webkit-appearance:none;width:38px;height:38px;border:1px solid var(--line);border-radius:8px;background:#0f1325;display:inline-block;cursor:pointer}
+.tick:checked{background:var(--ok)}
+.tick:disabled{opacity:.45;cursor:not-allowed}
+.tick:focus{outline:2px solid #4c7cf7;outline-offset:2px}
+.count{font-size:12px;color:var(--muted);min-width:28px}
+
+/* Accordion helpers */
+.caret{display:inline-block;transition:transform .15s ease;margin-right:6px}
+.caret.rot{transform:rotate(90deg)}
+.subj-head,.topic-head{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer}
+.chunk-pill{padding:4px 8px;border:1px solid var(--line);border-radius:8px;font-size:12px;display:inline-block;margin:4px 6px 0 0}
+
+/* highlight currently opened chunk */
+.flash{animation:flash 1.2s ease}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(123,216,143,.9)}100%{box-shadow:0 0 0 0 rgba(123,216,143,0)}}
+
+/* progress bar */
+.prog{margin-top:10px}
+.prog .line{height:10px;background:#0f1325;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.prog .bar{height:100%;background:var(--ok);width:0%}
+.prog .labels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;gap:8px;flex-wrap:wrap}
+
+/* ====== NEW: Due Today strip at top ====== */
+.duebar{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.duebar .title{font-weight:700;margin-right:6px}
+.due-pill{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:12px}
+.due-pill b{font-weight:700}
+.due-pill .phase{opacity:.8}
+.due-pill .act{margin-left:4px}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>Aptitude-Memorisation App</h1>
+  <div class="small">Intense → Week-Streak (3 days) → Spaced (1d×6,2d×6,3d×5,4d×4,8d×4,16d×3,28d×2) → Weekly (7d)</div>
+  <button id="exportJson" class="btn alt">Export JSON</button>
+  <label style="display:flex;gap:8px;align-items:center">
+    <input id="importFile" type="file" accept="application/json"/>
+    <span class="small">Import JSON</span>
+  </label>
+  <!-- NEW: Sync / Pull buttons -->
+  <button id="syncNow" class="btn">Sync</button>
+  <button id="pullNow" class="btn alt">Pull</button>
+</header>
+
+<!-- NEW: Due Today strip -->
+<div class="wrap">
+  <div id="dueBar" class="duebar small">
+    <span class="title">Due Today:</span>
+    <span class="empty">Checking…</span>
+  </div>
+</div>
+
+<div class="wrap grid">
+  <section class="panel">
+    <div style="display:flex;gap:8px">
+      <input id="newSubject" type="text" placeholder="New subject name"/>
+      <button id="addSubject" class="btn">+ Subject</button>
+    </div>
+    <div class="hr"></div>
+    <ul id="subjects" class="list"></ul>
+  </section>
+
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>Today</strong> <span id="todayDate" class="small"></span></div>
+      <span class="small" id="dueCounts"></span>
+    </div>
+    <table class="table" id="todayTable">
+      <thead><tr><th>Subject</th><th>Topic</th><th>Chunk</th><th>Phase</th><th>Action</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="hr"></div>
+    <div id="workArea" class="card empty">Select a topic or a due chunk to work on.</div>
+  </section>
+</div>
+
+<footer class="wrap small">Calendar-day scheduling: next due is midnight <b>local time (IST)</b> of the due day.</footer>
+
+<!-- NEW: PouchDB -->
+<script src="https://cdn.jsdelivr.net/npm/pouchdb@7.3.1/dist/pouchdb.min.js"></script>
+
+<script>
+/* ===== IST (New Delhi) DATE HELPERS ===== */
+const TZ="Asia/Kolkata";
+const fmtYMD = d => new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+const todayYMD = ()=> fmtYMD(new Date());
+function addDaysYMD(ymd, n){
+  const [y,m,d]=ymd.split('-').map(Number);
+  const t=new Date(Date.UTC(y,m-1,d));
+  t.setUTCDate(t.getUTCDate()+n);
+  return fmtYMD(t);
+}
+function isPastOrToday(ymd){ return !ymd || ymd <= todayYMD(); }
+
+/* ===== STORAGE & CONFIG ===== */
+const LSK="mem_spaced_v11_altC";
+let DB=JSON.parse(localStorage.getItem(LSK)||'{"subjects":[]}');
+
+/* ===== NEW: COUCH CONFIG (no auth) ===== */
+const COUCH_BASE = 'https://couch.techstudy.me';
+const COUCH_DB   = 'record';
+const REMOTE_URL = `${COUCH_BASE}/${COUCH_DB}`;         // https://couch.techstudy.me/record
+const LOCAL_DB_NAME = 'mem-record2';
+const STATE_DOC_ID = 'mem_state_v3';                    // single state doc
+
+const localDB  = new PouchDB(LOCAL_DB_NAME);
+const remoteDB = new PouchDB(REMOTE_URL, { skip_setup:true });
+
+/* UI expand/collapse state (not exported) */
+const UI = { sub: new Map(), topic: new Map(), current: {subId:null, topicId:null, chunkId:null} };
+
+const SCHEDULE_GROUPS=[{gap:1,reps:6},{gap:2,reps:6},{gap:3,reps:5},{gap:4,reps:4},{gap:8,reps:4},{gap:16,reps:3},{gap:28,reps:2}];
+const PERPETUAL_GAP=7;
+const TOTAL_SPACED_REPS = SCHEDULE_GROUPS.reduce((a,g)=>a+g.reps,0);
+
+/* ===== SAVE & RENDER ===== */
+function save(){localStorage.setItem(LSK,JSON.stringify(DB)); renderAll(); saveToPouchDebounced();}
+function renderAll(){ 
+  todayDateEl.textContent=`— ${todayYMD()}`; 
+  renderDueBar();
+  renderSubjects(); 
+  renderToday(); 
+}
+
+/* ===== NEW: Pouch bridge (live) ===== */
+let writingToPouch=false, applyingRemote=false;
+
+async function saveToPouch(){
+  try{
+    writingToPouch = true;
+    let doc;
+    try{ doc = await localDB.get(STATE_DOC_ID); }
+    catch(e){ if(e.status!==404) throw e; doc={_id:STATE_DOC_ID}; }
+    doc.lsk = LSK;
+    doc.app = 'aptitude-memorisation';
+    doc.data = DB;
+    doc.updatedAt = new Date().toISOString();
+    await localDB.put(doc);
+    // push just this doc quickly (in addition to live sync)
+    await PouchDB.replicate(localDB, remoteDB, { doc_ids:[STATE_DOC_ID] });
+  }catch(e){ console.error('saveToPouch', e); }
+  finally{ writingToPouch=false; }
+}
+
+let tDeb=null;
+function saveToPouchDebounced(){ clearTimeout(tDeb); tDeb=setTimeout(saveToPouch,300); }
+
+async function applyDocToApp(doc){
+  if(!doc || !doc.data) return;
+  applyingRemote = true;
+  DB = doc.data;
+  localStorage.setItem(LSK, JSON.stringify(DB));
+  renderAll();
+  applyingRemote = false;
+}
+
+/* Remote-first bootstrap so a fresh browser (after clearing data) restores itself */
+async function bootstrapRemoteFirst(){
+  try{
+    // pull the state doc from remote into local
+    await PouchDB.replicate(remoteDB, localDB, { doc_ids:[STATE_DOC_ID] });
+    const got = await localDB.get(STATE_DOC_ID).catch(e=>null);
+    if(got && got.data){ await applyDocToApp(got); return; }
+  }catch(e){ console.warn('bootstrap pull failed (will seed if needed):', e); }
+
+  // If nothing pulled and localStorage already has data, seed remote with it
+  if((DB?.subjects||[]).length){
+    await saveToPouch();
+  }
+}
+
+/* Start continuous two-way sync and watch for changes to our state doc */
+function startLiveSync(){
+  PouchDB.sync(localDB, remoteDB, { live:true, retry:true })
+    .on('error', err => console.error('sync error', err));
+
+  localDB.changes({ since:'now', live:true, include_docs:true, doc_ids:[STATE_DOC_ID] })
+    .on('change', ch => {
+      if(writingToPouch || applyingRemote) return;
+      if(ch.doc && ch.doc.data){ applyDocToApp(ch.doc); }
+    })
+    .on('error', err => console.error('changes error', err));
+}
+
+/* ===== MODELS ===== */
+function createSubject(name){return{id:crypto.randomUUID(),name,topics:[]};}
+function createTopic(name){return{id:crypto.randomUUID(),name,chunks:[]};}
+function createChunk(name){
+  return{
+    id:crypto.randomUUID(),name,phase:"intense",created:todayYMD(),
+    intense:{day1:[false,false,false],day2:[false,false,false],day3:[false,false,false]},
+    intenseDates:{day1:null,day2:null,day3:null},
+    weekStreak:{streak:0,lastDay:null},
+    spaced:{groupIndex:0,repsDoneInGroup:0,nextDue:addDaysYMD(todayYMD(),1)},
+    weekly:{nextDue:null},
+    lastReviewed:null
+  };
+}
+
+/* ===== NORMALIZER ===== */
+function intenseDone(ch){return ["day1","day2","day3"].every(d=>ch.intense[d].every(Boolean));}
+function startWeekStreak(ch){
+  ch.phase="week_streak";
+  ch.weekStreak={streak:0,lastDay:null};
+  ch.spaced.groupIndex=0; ch.spaced.repsDoneInGroup=0; ch.spaced.nextDue=addDaysYMD(todayYMD(),1);
+}
+function resetIntenseForNewDay(ch){
+  if(ch.phase!=="intense") return;
+  const t=todayYMD();
+  ["day1","day2","day3"].forEach(key=>{
+    const ticks=ch.intense[key];
+    const done=ticks.filter(Boolean).length===3;
+    const worked=ch.intenseDates?.[key];
+    if(!done && worked && worked!==t){
+      ch.intense[key]=[false,false,false];
+      ch.intenseDates[key]=null;
+    }
+  });
+}
+function normalizeChunk(ch){
+  resetIntenseForNewDay(ch);
+  if(ch.phase==="intense" && intenseDone(ch)){ startWeekStreak(ch); }
+}
+
+/* ===== Week-Streak enable ===== */
+function canReviewWeekStreak(ch){
+  const t=todayYMD();
+  const last=ch.weekStreak.lastDay;
+  if(!last) return true;
+  if(last===t && ch.weekStreak.streak<3) return true;
+  const next=addDaysYMD(last,1);
+  return isPastOrToday(next);
+}
+
+/* ===== DOM ===== */
+const $=(s,el=document)=>el.querySelector(s);
+const subjectsEl=$("#subjects"), todayDateEl=$("#todayDate"), dueCountsEl=$("#dueCounts"), todayTbody=$("#todayTable tbody"), workArea=$("#workArea");
+const dueBar=$("#dueBar");
+
+/* ===== PROGRESS (concise) ===== */
+function spacedRepsDoneCount(ch){
+  if(ch.phase==="weekly") return TOTAL_SPACED_REPS;
+  let done=0;
+  for(let i=0;i<ch.spaced.groupIndex;i++) done+=SCHEDULE_GROUPS[i].reps;
+  const cur=SCHEDULE_GROUPS[ch.spaced.groupIndex];
+  if(cur) done+=Math.min(ch.spaced.repsDoneInGroup, cur.reps);
+  return done;
+}
+
+/* ===== RENDER ===== */
+function renderDueBar(){
+  const rows=collectDue();
+  dueBar.innerHTML = '<span class="title">Due Today:</span>';
+  if(rows.length===0){
+    const span=document.createElement('span');
+    span.className='empty';
+    span.textContent='Nothing due today.';
+    dueBar.appendChild(span);
+    return;
+  }
+  rows.forEach(({sub,topic,ch,phase})=>{
+    const pill=document.createElement("div");
+    pill.className="due-pill";
+    pill.innerHTML = `
+      <span><b>${sub.name}</b> › ${topic.name} › <b>${ch.name}</b></span>
+      <span class="phase">(${phase})</span>
+      ${
+        ch.phase==="intense" 
+          ? '<button class="btn ghost act" data-act="open-only">Open</button>'
+          : `<button class="btn alt act" data-act="review">${ch.phase==="weekly"?"Review":"Review"}</button>`
+      }
+    `;
+    pill.dataset.sub=sub.id; pill.dataset.topic=topic.id; pill.dataset.chunk=ch.id;
+    dueBar.appendChild(pill);
+  });
+
+  // events
+  dueBar.onclick = (e)=>{
+    const pill = e.target.closest(".due-pill"); if(!pill) return;
+    const act = e.target.dataset.act || "open-only";
+    const sid=pill.dataset.sub, tid=pill.dataset.topic, cid=pill.dataset.chunk;
+    const S=DB.subjects.find(x=>x.id===sid);
+    const T=S?.topics.find(x=>x.id===tid);
+    const C=T?.chunks.find(x=>x.id===cid);
+    if(!S||!T||!C) return;
+
+    if(act==="review"){
+      if(C.phase==="week_streak") doWeekStreakReview(C);
+      else if(C.phase==="spaced") doSpacedReview(C);
+      else if(C.phase==="weekly") doWeeklyReview(C);
+      save(); // re-render + push
+    }else{
+      UI.current={subId:sid, topicId:tid, chunkId:cid};
+      openTopic(sid,tid,cid);
+    }
+  };
+}
+
+function renderSubjects(){
+  subjectsEl.innerHTML="";
+  if(DB.subjects.length===0){subjectsEl.innerHTML='<div class="empty">No subjects yet. Add one above.</div>';return;}
+
+  DB.subjects.forEach(sub=>{
+    const li=document.createElement("li"); li.className="subject-item";
+    const subOpen = UI.sub.get(sub.id) ?? true;
+
+    li.innerHTML = `
+      <div class="subj-head" data-act="toggle-sub" data-id="${sub.id}">
+        <div><span class="caret ${subOpen?'rot':''}">▶</span><span class="title" style="font-weight:600">${sub.name}</span></div>
+        <span style="display:flex;gap:6px">
+          <button class="btn alt" data-act="rename-sub" data-id="${sub.id}">Rename</button>
+          <button class="btn danger" data-act="del-sub" data-id="${sub.id}">Delete</button>
+        </span>
+      </div>
+
+      <div class="sub-body" style="margin-top:8px; ${subOpen?'':'display:none'}">
+        <div style="display:flex;gap:8px">
+          <input type="text" placeholder="New topic name" class="topic-name"/>
+          <button class="btn" data-act="add-topic" data-id="${sub.id}">+ Topic</button>
+        </div>
+        <div class="hr"></div>
+        <div class="list" data-topics></div>
+      </div>
+    `;
+
+    const topicsWrap = li.querySelector("[data-topics]");
+    if(sub.topics.length===0){
+      topicsWrap.innerHTML = '<div class="empty">No topics.</div>';
+    }else{
+      sub.topics.forEach(t=>{
+        const key = `${sub.id}:${t.id}`;
+        const tOpen = UI.topic.get(key) ?? false;
+
+        const ti=document.createElement("div"); ti.className="topic-item";
+        ti.innerHTML = `
+          <div class="topic-head" data-act="toggle-topic" data-sub="${sub.id}" data-topic="${t.id}">
+            <div><span class="caret ${tOpen?'rot':''}">▶</span><strong>${t.name}</strong> <span class="small">(${t.chunks.length} chunks)</span></div>
+            <span style="display:flex;gap:6px">
+              <button class="btn" data-act="quick-add-chunk" data-sub="${sub.id}" data-topic="${t.id}">+ Chunk</button>
+              <button class="btn alt" data-act="rename-topic" data-sub="${sub.id}" data-topic="${t.id}">Rename</button>
+              <button class="btn danger" data-act="del-topic" data-sub="${sub.id}" data-topic="${t.id}">Delete</button>
+            </span>
+          </div>
+
+          <div class="topic-body" style="${tOpen?'':'display:none'}">
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input type="text" placeholder="New chunk name" class="chunk-name"/>
+              <button class="btn" data-act="add-chunk" data-sub="${sub.id}" data-topic="${t.id}">+ Chunk</button>
+              <button class="btn ghost" data-act="bulk-demo" data-sub="${sub.id}" data-topic="${t.id}">+ Demo 2 chunks</button>
+            </div>
+            <div style="margin-top:8px" data-chunks></div>
+          </div>
+        `;
+
+        const chunkWrap = ti.querySelector("[data-chunks]");
+        if(t.chunks.length===0){
+          chunkWrap.innerHTML = '<div class="empty">No chunks yet.</div>';
+        }else{
+          chunkWrap.innerHTML = t.chunks.map(ch => `
+            <button class="chunk-pill" data-act="open-chunk" data-sub="${sub.id}" data-topic="${t.id}" data-ch="${ch.id}">
+              ${ch.name}
+            </button>
+          `).join("");
+        }
+
+        // handle clicks inside this topic item
+        ti.addEventListener("click",(e)=>{
+          const btn=e.target.closest("[data-act]"); if(!btn) return;
+          const act=btn.dataset.act;
+          const sid=btn.dataset.sub; const tid=btn.dataset.topic;
+          const subRef=DB.subjects.find(s=>s.id===sid);
+          const topic=subRef.topics.find(x=>x.id===tid);
+
+          if(act==="toggle-topic"){ UI.topic.set(`${sid}:${tid}`, !(UI.topic.get(`${sid}:${tid}`) ?? false)); renderSubjects(); return; }
+          if(act==="rename-topic"){const n=prompt("Rename topic",topic.name); if(n){topic.name=n; save();} return;}
+          if(act==="del-topic"){if(confirm("Delete topic and all its chunks?")){subRef.topics=subRef.topics.filter(x=>x.id!==tid); save();} return;}
+          if(act==="add-chunk"){const n=ti.querySelector(".chunk-name").value.trim(); if(!n) return; topic.chunks.push(createChunk(n)); save(); return;}
+          if(act==="quick-add-chunk"){const n=prompt("New chunk name"); if(!n) return; topic.chunks.push(createChunk(n)); save(); return;}
+          if(act==="bulk-demo"){topic.chunks.push(createChunk("A1"),createChunk("A2")); save(); return;}
+          if(act==="open-chunk"){
+            const cid=btn.dataset.ch;
+            UI.current={subId:sid, topicId:tid, chunkId:cid};
+            openTopic(sid, tid, cid);
+            return;
+          }
+        });
+
+        topicsWrap.appendChild(ti);
+      });
+    }
+
+    li.addEventListener("click",(e)=>{
+      const btn=e.target.closest("[data-act]"); if(!btn) return;
+      const act=btn.dataset.act;
+
+      if(act==="toggle-sub"){
+        const id=btn.dataset.id;
+        UI.sub.set(id, !(UI.sub.get(id) ?? true));
+        renderSubjects();
+        return;
+      }
+
+      const sid = btn.dataset.id || btn.dataset.sub;
+      const subRef = DB.subjects.find(s=>s.id===sid);
+
+      if(act==="rename-sub"){const n=prompt("Rename subject",subRef.name); if(n){subRef.name=n; save();} return;}
+      if(act==="del-sub"){if(confirm("Delete subject and EVERYTHING?")){DB.subjects=DB.subjects.filter(x=>x.id!==sub.id); save();} return;}
+      if(act==="add-topic"){const n=li.querySelector(".topic-name").value.trim(); if(!n) return; subRef.topics.push(createTopic(n)); save(); return;}
+    });
+
+    subjectsEl.appendChild(li);
+  });
+}
+
+function renderCycleFooterHTML(ch){
+  const totalSpaced = SCHEDULE_GROUPS.reduce((a,g)=>a+g.reps,0);
+  const intenseDays=["day1","day2","day3"].reduce((n,k)=>n+(ch.intense[k].every(Boolean)?1:0),0);
+  const week= Math.min(ch.weekStreak?.streak||0,3);
+  const spaced= spacedRepsDoneCount(ch);
+  const total = 3 + 3 + totalSpaced;
+  const pct = Math.round(((intenseDays + week + spaced)/total)*100);
+  return `
+    <div class="prog">
+      <div class="line"><div class="bar" style="width:${pct}%"></div></div>
+      <div class="labels">
+        <span><b>${pct}%</b> of full cycle</span>
+        <span>Intense ${intenseDays}/3</span>
+        <span>Week-streak ${week}/3</span>
+        <span>Spaced ${spaced}/${totalSpaced}</span>
+      </div>
+    </div>
+  `;
+}
+
+function openTopic(subId,topicId,highlightChunkId=null){
+  const sub=DB.subjects.find(s=>s.id===subId); const topic=sub?.topics.find(t=>t.id===topicId);
+  if(!topic){workArea.textContent="Topic not found"; return;}
+  workArea.classList.remove("empty");
+
+  const selectedChunkName = highlightChunkId ? (topic.chunks.find(c=>c.id===highlightChunkId)?.name || "") : "";
+  workArea.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>${sub.name}</strong> → <strong>${topic.name}</strong></div>
+      <div class="small">${selectedChunkName?`Currently selected: <b>${selectedChunkName}</b>`:""}</div>
+    </div>
+    <div class="hr"></div>
+    <div id="chunkList"></div>`;
+  const container=$("#chunkList",workArea);
+
+  if(topic.chunks.length===0){container.innerHTML='<div class="empty">No chunks yet.</div>';return;}
+  topic.chunks.forEach(ch=>{
+    normalizeChunk(ch);
+    const card=document.createElement("div"); card.className="card"; card.id=`chunk-${ch.id}`;
+    card.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div><strong>${ch.name}</strong> <span class="badge ${phaseClass(ch)}">${phaseLabel(ch)}</span></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn alt" data-act="rename">Rename</button>
+          <button class="btn danger" data-act="del">Delete</button>
+        </div>
+      </div>
+      ${renderChunkBody(ch)}
+      ${renderCycleFooterHTML(ch)}
+    `;
+    attachChunkHandlers(card, topic, ch);
+    container.append(card);
+  });
+
+  if(highlightChunkId){
+    const el = document.getElementById(`chunk-${highlightChunkId}`);
+    if(el){ el.scrollIntoView({behavior:"smooth",block:"start"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),1200); }
+  }
+}
+
+function phaseLabel(ch){return ch.phase==="intense"?"intense":ch.phase==="week_streak"?"week-streak":ch.phase==="spaced"?"spaced":"weekly";}
+function phaseClass(ch){return ch.phase==="intense"?"state-intense":ch.phase==="week_streak"?"state-streak":ch.phase==="spaced"?"state-spaced":"state-weekly";}
+
+const countTrue=a=>a.filter(Boolean).length;
+const dayDone=a=>countTrue(a)===3;
+function canWorkDay(ch,day){
+  if(day==="day1") return true;
+  if(day==="day2") return dayDone(ch.intense.day1);
+  if(day==="day3") return dayDone(ch.intense.day2);
+  return true;
+}
+
+function renderChkRow(ch, dayKey, arr){
+  const n=countTrue(arr);
+  const dayEnabled=canWorkDay(ch,dayKey);
+  const disableUnchecked=(n>=3);
+  return `
+    <div class="chkrow">
+      <span class="chklabel">${dayKey}</span>
+      <div class="chkgrid">
+        ${arr.map((v,i)=>{
+          const dis=(!dayEnabled)||(!v&&disableUnchecked);
+          return `<input type="checkbox" class="tick" data-act="tick:${dayKey}:${i}" ${v?'checked':''} ${dis?'disabled':''}>`;
+        }).join("")}
+      </div>
+      <span class="count" data-count="${dayKey}">${n}/3</span>
+    </div>`;
+}
+
+function renderChunkBody(ch){
+  if(ch.phase==="intense"){
+    return `
+      <div class="small" style="margin-bottom:6px">Complete 3×3 over 3 calendar days. Day-2 unlocks after Day-1 is 3/3; Day-3 unlocks after Day-2 is 3/3. <em>Partial days reset at midnight.</em></div>
+      ${renderChkRow(ch,"day1",ch.intense.day1)}
+      ${renderChkRow(ch,"day2",ch.intense.day2)}
+      ${renderChkRow(ch,"day3",ch.intense.day3)}
+    `;
+  }
+  if(ch.phase==="week_streak"){
+    const due=ch.weekStreak.lastDay?addDaysYMD(ch.weekStreak.lastDay,1):todayYMD();
+    const ok=canReviewWeekStreak(ch);
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="small">Streak ${ch.weekStreak.streak}/3 — Next due: ${due}</div>
+        <button class="btn ${ok?'':'ghost'}" data-act="review-week-streak" ${ok?'':'disabled'}>Review today</button>
+      </div>`;
+  }
+  if(ch.phase==="spaced"){
+    const g=SCHEDULE_GROUPS[ch.spaced.groupIndex];
+    const label=g?`${g.gap}d gap (${ch.spaced.repsDoneInGroup}/${g.reps})`:"completed";
+    const due=ch.spaced.nextDue, ok=isPastOrToday(due);
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="small">Next: ${due} — ${label}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ${ok?'':'ghost'}" data-act="review-spaced" ${ok?'':'disabled'}>Review</button>
+          <button class="btn ghost" data-act="force-due">Force due</button>
+        </div>
+      </div>`;
+  }
+  if(ch.phase==="weekly"){
+    const due=ch.weekly.nextDue||todayYMD(), ok=isPastOrToday(due);
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="small">Weekly review every 7 days — Next: ${due}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ${ok?'':'ghost'}" data-act="review-weekly" ${ok?'':'disabled'}>Review</button>
+          <button class="btn ghost" data-act="force-due">Force due</button>
+        </div>
+      </div>`;
+  }
+  return "";
+}
+
+/* ===== HANDLERS ===== */
+function attachChunkHandlers(card, topic, ch){
+  // checkboxes
+  card.addEventListener("change",(e)=>{
+    const el=e.target; if(!(el instanceof HTMLInputElement)) return;
+    const act=el.dataset.act; if(!act) return;
+    const [_,day,idx]=act.split(":"); const i=+idx; const arr=ch.intense[day];
+    if(!canWorkDay(ch,day)){ el.checked = !!arr[i]; return; }
+    const before=countTrue(arr);
+    const want=!!el.checked;
+    if(want && before>=3){ el.checked=false; return; }
+    arr[i]=want;
+    if(!ch.intenseDates) ch.intenseDates={day1:null,day2:null,day3:null};
+    if(want && before===0 && !ch.intenseDates[day]) ch.intenseDates[day]=todayYMD();
+    if(!arr.some(Boolean)) ch.intenseDates[day]=null;
+    const cntEl = card.querySelector(`[data-count="${day}"]`);
+    if(cntEl){ cntEl.textContent = `${countTrue(arr)}/3`; }
+    if(intenseDone(ch)) startWeekStreak(ch);
+    save();
+  });
+
+  // buttons
+  card.addEventListener("click",(e)=>{
+    const btn=e.target.closest("[data-act]"); if(!btn) return;
+    const act=btn.dataset.act;
+    if(act==="rename"){const nm=prompt("Rename chunk",ch.name); if(nm){ch.name=nm; save();}}
+    if(act==="del"){if(confirm("Delete this chunk?")){topic.chunks=topic.chunks.filter(x=>x.id!==ch.id); save();}}
+    if(act==="review-week-streak"){doWeekStreakReview(ch); save();}
+    if(act==="review-spaced"){doSpacedReview(ch); save();}
+    if(act==="review-weekly"){doWeeklyReview(ch); save();}
+    if(act==="force-due"){if(ch.phase==="spaced") ch.spaced.nextDue=todayYMD(); if(ch.phase==="weekly") ch.weekly.nextDue=todayYMD(); save();}
+  });
+}
+
+/* ===== PHASE LOGIC ===== */
+function doWeekStreakReview(ch){
+  const today=todayYMD();
+  const last=ch.weekStreak.lastDay;
+
+  if(!last){ ch.weekStreak.streak = 1; ch.weekStreak.lastDay = today; }
+  else if(today===last){ ch.weekStreak.streak = Math.min(3, ch.weekStreak.streak + 1); }
+  else {
+    const expected=addDaysYMD(last,1);
+    ch.weekStreak.streak = (today===expected) ? (ch.weekStreak.streak+1) : 1;
+    ch.weekStreak.lastDay = today;
+  }
+
+  if(ch.weekStreak.streak>=3){
+    ch.phase="spaced";
+    ch.spaced.groupIndex=0; ch.spaced.repsDoneInGroup=0;
+    ch.spaced.nextDue=addDaysYMD(todayYMD(),SCHEDULE_GROUPS[0].gap);
+  }
+}
+function doSpacedReview(ch){
+  const g=SCHEDULE_GROUPS[ch.spaced.groupIndex];
+  if(!g){ ch.phase="weekly"; ch.weekly.nextDue=addDaysYMD(todayYMD(),PERPETUAL_GAP); return; }
+  ch.lastReviewed=todayYMD(); ch.spaced.repsDoneInGroup++;
+  if(ch.spaced.repsDoneInGroup>=g.reps){
+    ch.spaced.groupIndex++; ch.spaced.repsDoneInGroup=0;
+    const ng=SCHEDULE_GROUPS[ch.spaced.groupIndex];
+    if(ng) ch.spaced.nextDue=addDaysYMD(todayYMD(),ng.gap);
+    else { ch.phase="weekly"; ch.weekly.nextDue=addDaysYMD(todayYMD(),PERPETUAL_GAP); }
+  } else {
+    ch.spaced.nextDue=addDaysYMD(todayYMD(),g.gap);
+  }
+}
+function doWeeklyReview(ch){ ch.lastReviewed=todayYMD(); ch.weekly.nextDue=addDaysYMD(todayYMD(),PERPETUAL_GAP); }
+
+/* ===== TODAY ===== */
+function collectDue(){
+  const out=[];
+  DB.subjects.forEach(sub=>sub.topics.forEach(topic=>topic.chunks.forEach(ch=>{
+    normalizeChunk(ch);
+    let due=false, phase="";
+    if(ch.phase==="intense"){due=true; phase="Intense";}
+    else if(ch.phase==="week_streak"){ due = canReviewWeekStreak(ch); phase="Week-Streak"; }
+    else if(ch.phase==="spaced"){due=isPastOrToday(ch.spaced.nextDue); phase="Spaced";}
+    else if(ch.phase==="weekly"){due=isPastOrToday(ch.weekly.nextDue||todayYMD()); phase="Weekly";}
+    if(due) out.push({sub,topic,ch,phase});
+  })));
+  return out;
+}
+function renderToday(){
+  const rows=collectDue(); todayTbody.innerHTML="";
+  if(rows.length===0){todayTbody.innerHTML='<tr><td colspan="5" class="small">Nothing due today.</td></tr>'; dueCountsEl.textContent=""; return;}
+  dueCountsEl.textContent=`${rows.length} due`;
+  rows.forEach(({sub,topic,ch,phase})=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${sub.name}</td><td>${topic.name}</td><td>${ch.name}</td><td>${phase}</td>
+      <td>${
+        ch.phase==="intense" ? '<span class="small">Open chunk to tick 3×3</span>' :
+        ch.phase==="week_streak" ? `<button class="btn" data-act="go-week:${sub.id}:${topic.id}:${ch.id}">Review</button>` :
+        ch.phase==="spaced" ? `<button class="btn" data-act="go-spaced:${sub.id}:${topic.id}:${ch.id}">Review</button>` :
+        `<button class="btn" data-act="go-weekly:${sub.id}:${topic.id}:${ch.id}">Review</button>`
+      }</td>`;
+    tr.addEventListener("click",(e)=>{
+      const btn=e.target.closest("[data-act]"); if(!btn){openTopic(sub.id,topic.id);return;}
+      const [kind,sid,tid,cid]=btn.dataset.act.split(":");
+      const S=DB.subjects.find(x=>x.id===sid), T=S.topics.find(x=>x.id===tid), C=T.chunks.find(x=>x.id===cid);
+      if(kind==="go-week") doWeekStreakReview(C);
+      if(kind==="go-spaced") doSpacedReview(C);
+      if(kind==="go-weekly") doWeeklyReview(C);
+      save();
+    });
+    todayTbody.append(tr);
+  });
+}
+
+/* ===== import/export & bootstrap ===== */
+$("#exportJson").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=`mem_spaced_altB_${todayYMD()}.json`;
+  a.click(); URL.revokeObjectURL(url);
+});
+$("#importFile").addEventListener("change",(e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  const fr=new FileReader(); fr.onload=()=>{try{const data=JSON.parse(fr.result); if(!data.subjects) throw 0; DB=data; save();}catch{alert("Invalid JSON");}};
+  fr.readAsText(f);
+});
+$("#addSubject").addEventListener("click",()=>{
+  const n=$("#newSubject").value.trim(); if(!n) return;
+  DB.subjects.push(createSubject(n)); $("#newSubject").value=""; save();
+});
+
+/* ===== NEW: manual Sync / Pull buttons ===== */
+document.getElementById('syncNow').addEventListener('click', async ()=>{
+  try{ await PouchDB.replicate(localDB, remoteDB, { doc_ids:[STATE_DOC_ID] }); }catch(e){ console.error(e); }
+});
+document.getElementById('pullNow').addEventListener('click', async ()=>{
+  try{
+    await PouchDB.replicate(remoteDB, localDB, { doc_ids:[STATE_DOC_ID] });
+    const doc = await localDB.get(STATE_DOC_ID).catch(e=>null);
+    if(doc) await applyDocToApp(doc);
+  }catch(e){ console.error(e); }
+});
+
+/* ===== BOOT ===== */
+(async function(){
+  // Try remote first (so a clean browser restores itself)
+  await bootstrapRemoteFirst();
+
+  // If still empty, seed a starter example once (won't overwrite remote)
+  if((DB.subjects||[]).length===0){
+    const s=createSubject("History");
+    const t=createTopic("President of India Timeline");
+    t.chunks.push(createChunk("C1"));
+    s.topics.push(t); DB.subjects.push(s);
+    save(); // this will also create & push the state doc
+  }else{
+    renderAll();
+  }
+
+  // Begin live two-way sync
+  startLiveSync();
+})();
+</script>
+</body>
+</html>
