@@ -167,7 +167,7 @@ async function saveToPouch(){
     try{ doc = await localDB.get(STATE_DOC_ID); }
     catch(e){ if(e.status!==404) throw e; doc={_id:STATE_DOC_ID}; }
     doc.lsk = LSK;
-    doc.app = 'aptitude-memorisation';
+    doc.app = 'gs-record';
     doc.data = DB;
     doc.updatedAt = new Date().toISOString();
     await localDB.put(doc);
